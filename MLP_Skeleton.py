@@ -19,7 +19,7 @@ class LinearTransform(object):
     def __init__(self, W):
         #pdb.set_trace()
 
-        self.W = np.random.rand( W[0]+1, W[1] )
+        self.W = np.random.rand( *W )#here the inputs are already scaled for x bias
         #self.W = np.concatenate( ( W, np.ones((1,W.shape[1])) ), axis=0 )
         self.v = 0
         #append a bias dimension so that everything is less awful. 
@@ -27,13 +27,14 @@ class LinearTransform(object):
         
 
     def forward(self, x):
+        #pdb.set_trace()
         return np.dot( x , self.W)   #W is fromXto, x is input 1Xfrom
 
     def backward( self, grad_output, zin,
             learning_rate=  0.1, momentum=0.1, l2_penalty=0.0 ):
         delt = zin
         self.v = self.v*momentum + learning_rate*grad_output
-        W -= self.v
+        self.W -= self.v
         return zin * grad_output
 
 
@@ -58,7 +59,7 @@ class ReLU(object):
 # this is put into a single layer is because it has a simple gradient form
 class Sigmoid(object):
     #target is the real value 
-        def forward(self, x , target):
+        def forward(self, x):
             return  1/(1+np.exp(x) )
 
             
@@ -68,6 +69,7 @@ class Sigmoid(object):
 
         #predict class 0 or 1 based on sigmoid mapping from assignment desc.
         def predict( self, x):
+            #pdb.set_trace()
             if 1/(1+np.exp(x) ) > .5:
                 return 1
             else:
@@ -75,7 +77,8 @@ class Sigmoid(object):
             
 class CrossEntropy(object):
     def forward(self, x, target):
-        return target*log(x) + (1-target)*log(x)
+        #pdb.set_trace()
+        return target*np.log(x) + (1-target)*np.log(x)
     
     #to calculate this we need forward result
     def backward(self, grad_output, target):
@@ -109,17 +112,45 @@ class MLP(object):
 
 
     def train( self, x_batch, y_batch, 
-        learning_rate=.5, momentum=.1, l2_penalty=.1 ):      #train on variable sizebatch
+        lr=.5, mtm=.1, l2_p=.1 ):      #train on variable sizebatch
         # INSERT CODE for training the network
-        
-        
-        #RETURN ACCURACY AND LOSS FOR THIS SUBSET
-        accuracy = loss = 0
+        total = correct = 0
 
-        return  loss, accuracy
+        loss = 0
+
+        for x,y in zip(x_batch, y_batch):
+            pipe = []
+            #pipe = out1, g(out1), out2, sig(out2), cEnt(sig(out2)
+            
+            #FORWARD AND STORE
+            pipe.append(self.layers[0].forward(x))
+            for lyr in self.layers[:-1]:
+                pipe.append(lyr.forward(pipe[-1] ) )
+            pipe.append( self.layers[-1].forward(pipe[-1], y) )
+
+            #ACCURACY AND LOSS CALCULATIONS
+            pred = self.layers[-2].predict(pipe[-2])
+            if pred == y:
+                correct +=1
+            total +=1
+            loss += pipe[-1]
+
+            #BACKWARDS
+            siphon = []
+            siphon.append( self.layers[-1].backward( pipe[-2], y) )
+            for lyr, p in zip( self.layers[-2::-1], pipe[-2::-1] ):
+                siphon.append( lyr.backward(siphon[-1], lr, mtm, l2_p) )
+
+
+        accuracy = correct/total
+        print(accuracy)
+        
+        return  loss, accuracy #RETURN ACCURACY AND LOSS FOR THIS SUBSET
+
+
+
     def evaluate(self, x_batch, y_batch):
         
-
         accuracy = loss = 0
         return  loss, accuracy
         # INSERT CODE for testing the network
@@ -163,7 +194,7 @@ if __name__ == '__main__':
             end = start + batch_size
             cut = slice(int(start), int(end))
 
-            print(cut)
+            print("\t", cut)
             #pdb.set_trace()
 
 
@@ -180,12 +211,13 @@ if __name__ == '__main__':
 
             print('\r[Epoch {}, mb {}]    Avg.Loss = {:.3f}'.format(
                     epoch + 1, b +  1, total_loss, ), end='', )
+
             sys.stdout.flush()
                 # INSERT YOUR CODE AFTER ALL MINI_BATCHES HERE
                 # MAKE SURE TO COMPUTE train_loss, train_accuracy, test_loss, test_accuracy
 
 
-        train_loss, train_accuracy = mlp.train( train_x[cut], train_y[cut], 
+        train_loss, train_accuracy = mlp.train( train_x, train_y, 
                 lr, momentum, l2_penalty)
 
         test_loss, test_accuracy = mlp.evaluate( test_x, test_y )
