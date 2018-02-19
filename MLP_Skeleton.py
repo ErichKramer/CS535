@@ -15,8 +15,13 @@ import numpy as np
 # weight matrix W and computes W x as the forward step
 class LinearTransform(object):
 
+    #take in W as dimensions needed
     def __init__(self, W):
-        self.W = np.concatenate( ( W, np.ones((1,W.shape[1])) ), axis=0 )
+        #pdb.set_trace()
+
+        self.W = np.random.rand( W[0]+1, W[1] )
+        #self.W = np.concatenate( ( W, np.ones((1,W.shape[1])) ), axis=0 )
+        self.v = 0
         #append a bias dimension so that everything is less awful. 
         #np.concat is very slow, do this outside the function for faster performance
         
@@ -24,10 +29,12 @@ class LinearTransform(object):
     def forward(self, x):
         return np.dot( x , self.W)   #W is fromXto, x is input 1Xfrom
 
-    def backward( self, grad_output, 
-        learning_rate=0.0, momentum=0.0, l2_penalty=0.0 ):
-        
-        return None         #TBI
+    def backward( self, grad_output, zin,
+            learning_rate=  0.1, momentum=0.1, l2_penalty=0.0 ):
+        delt = zin
+        self.v = self.v*momentum + learning_rate*grad_output
+        W -= self.v
+        return zin * grad_output
 
 
 # This is a class for a ReLU layer max(x,0)
@@ -39,7 +46,7 @@ class ReLU(object):
 
     def backward( self, grad_output, 
         learning_rate=0.0, momentum=0.0, l2_penalty=0.0 ):
-        if x > 0:
+        if grad_output > 0:
             return 1
         return 0
     # DEFINE backward function
@@ -56,8 +63,7 @@ class Sigmoid(object):
 
             
         def backward( self, grad_output, learning_rate=0.0, momentum=0.0, l2_penalty=0.0):
-            #asdfasdfasf
-            return 0
+            return grad_output * (1-grad_output)
 
 
         #predict class 0 or 1 based on sigmoid mapping from assignment desc.
@@ -69,11 +75,11 @@ class Sigmoid(object):
             
 class CrossEntropy(object):
     def forward(self, x, target):
-        
-        return
-
-    def backward(self, x, target):
-        return
+        return target*log(x) + (1-target)*log(x)
+    
+    #to calculate this we need forward result
+    def backward(self, grad_output, target):
+        return -(target/grad_output) + (1-target)/(1-grad_output)
 
 
 
@@ -88,8 +94,18 @@ class MLP(object):
         self.nhidden = hidden_units
         
         self.layers = []
-    #w1
+        W1_dim = (input_dims, hidden_units)
+        self.layers.append( LinearTransform( W1_dim ) )
+        self.layers.append( ReLU() )
+        W2_dim = (hidden_units, 1)
+        self.layers.append( LinearTransform( W2_dim ) )
+        self.layers.append( Sigmoid() )
+        self.layers.append( CrossEntropy() )
+    #w1 input_dimsXhidden_units
+    #ReLu hiddenXhidden
     #w2
+    #sigmoid
+    #loss
 
 
     def train( self, x_batch, y_batch, 
@@ -117,7 +133,11 @@ if __name__ == '__main__':
     train_y = data['train_labels']
     test_x = data['test_data']/255  #normalized to [0,1]; consider [-1,1]
     test_y = data['test_labels']
-        
+    #PAD WITH BIAS DIM
+    #pdb.set_trace()
+    train_x = np.concatenate( ( train_x, np.ones((1, train_x.shape[0])).T ), axis=1)
+    test_x = np.concatenate( ( test_x, np.ones((1, test_x.shape[0])).T ), axis=1)
+
     num_examples, input_dims = train_x.shape
      
     hidden_units = input_dims  
@@ -144,7 +164,7 @@ if __name__ == '__main__':
             cut = slice(int(start), int(end))
 
             print(cut)
-            pdb.set_trace()
+            #pdb.set_trace()
 
 
             #TRAIN
