@@ -19,7 +19,6 @@ class LinearTransform(object):
     def __init__(self, W):
 
         self.W = np.random.rand( *W )*.2 -.1 #here the inputs are already scaled for x bias
-        #self.W = np.zeros( W )
         self.v = 0
         
 
@@ -28,10 +27,12 @@ class LinearTransform(object):
 
     def backward( self, grad_output, zin,
             learning_rate=  0.1, momentum=0.1, l2_penalty=0.0 ):
-        delt = zin
-        self.v = self.v*momentum + learning_rate*grad_output
+        
+        delt = np.dot( np.matrix(zin).T , np.matrix(grad_output) )
+        #print(delt.shape)
+        self.v = self.v*momentum + delt*learning_rate #learning_rate*grad_output
         self.W -= self.v
-        return zin * grad_output
+        return delt#zin * grad_output
 
 
 # This is a class for a ReLU layer max(x,0)
@@ -44,7 +45,8 @@ class ReLU(object):
     #on backward pass we go from 
     def backward( self, grad_output, zin,
             learning_rate=0.0, momentum=0.0, l2_penalty=0.0 ):
-        return grad_output * (zin > 0 ) #filter those < 0, map to 1
+
+        return np.multiply( grad_output.T,(zin > 0 ) ) #filter those < 0, map to 1
         
         #otherwise
         #for z in zin:
@@ -64,13 +66,12 @@ class Sigmoid(object):
     #target is the real value 
         def forward(self, x):
             tmp = 1/(1+np.exp(-x) )
-            np.clip(tmp, .01, .99)
+            tmp = np.clip(tmp, .001, .999)
             return tmp
 
             
         def backward( self, grad_output, zin, 
                 learning_rate=0.0, momentum=0.0, l2_penalty=0.0):
-            
             tmp = zin * (1-zin) * grad_output
             np.clip(tmp, .01, .99)
             return tmp
@@ -154,6 +155,8 @@ class MLP(object):
             pred = self.layers[-2].predict(pipe[-2])
             if pred == y:
                 correct +=1
+            if pred != 1:
+                print(pred)
             total +=1
             loss += pipe[-1]
 
@@ -165,9 +168,11 @@ class MLP(object):
             siphon.append( self.layers[-1].backward( pipe[-2], y) )
             for lyr, p in zip( self.layers[::-1][2:], pipe[::-1][3:] ):
                 siphon.append( lyr.backward(siphon[-1], p, lr, mtm, l2_p) )
+                #pdb.set_trace()
             siphon.append( self.layers[0].backward( siphon[-1], x, lr, mtm, l2_p ) )
 
-            #:pdb.set_trace()
+            #if total %50 == 0:
+            #    pdb.set_trace()
 
         accuracy = correct/total
         
@@ -176,8 +181,24 @@ class MLP(object):
 
 
     def evaluate(self, x_batch, y_batch):
-        
-        accuracy = loss = 0
+
+        loss = correct = total = 0
+
+        for x,y in zip(x_batch, y_batch):
+            pipe = []
+            pipe.append(self.layers[0].forward(x) )
+            for lyr in self.layers[1:-1]:
+                pipe.append(lyr.forward( pipe[-1] ) )
+            pred = self.layers[-2].predict( pipe[-1] )
+
+            if pred == y:
+                correct +=1
+            print(pred)
+            total +=1
+            loss += self.layers[-1].forward(pipe[-1], y )
+
+        accuracy = correct/total
+
         return  loss, accuracy
         # INSERT CODE for testing the network
 # ADD other operations and data entries in MLP if needed
@@ -196,13 +217,13 @@ if __name__ == '__main__':
 
     num_examples, input_dims = train_x.shape
      
-    hidden_units = input_dims  
+    hidden_units = input_dims + 1
     num_epochs = 10
     num_batches = 100
     batch_size = float(len(train_x))/float(num_batches)
 
 
-    lr = .01
+    lr = .001
     momentum = .1
     l2_penalty = .1
 
@@ -227,6 +248,8 @@ if __name__ == '__main__':
             train_loss, train_accuracy = mlp.train( train_x[cut], train_y[cut], 
                     lr, momentum, l2_penalty)
             
+            #train_loss, train_accuracy = mlp.evaluate( train_x[cut], train_y[cut] )
+
             #REFRESH TEST RESULTS, 
             #test_loss, test_accuracy = mlp.evaluate( test_x, test_y )
 
