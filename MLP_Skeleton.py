@@ -2,13 +2,9 @@
 ERICH KRAMER 
 """
 
-
-from __future__ import division
-from __future__ import print_function
-
 import sys
 import pdb
-import cPickle
+import pickle
 import numpy as np
 
 # This is a class for a LinearTransform layer which takes an input 
@@ -48,7 +44,7 @@ class ReLU(object):
     #on backward pass we go from 
     def backward( self, grad_output, zin,
             learning_rate=0.0, momentum=0.0, l2_penalty=0.0 ):
-        return np.multiply( grad_output.T, 1* (zin > 0 ) ) #filter those < 0, map to 1
+        return np.multiply( grad_output.T, zin* (zin > 0 ) ) #filter those < 0, map to 1
         
         #otherwise
         #for z in zin:
@@ -90,13 +86,19 @@ class CrossEntropy(object):
         x = np.clip(x, .001, .999)
         return -( target*np.log(x) + (1.0-target)*np.log(1.0-x))
     
+
+    def forward2(self, x, target):
+        x = np.clip(x, .001, .999)
+        sig = 1.0/(1+np.exp(-x))
+        return - (target*np.log(sig) + (1-target)*np.log(1 - sig) )
+
     #to calculate this we need forward result
-    def backward2(self, grad_output, target):
+    def backward(self, grad_output, target):
 
         return grad_output - target
 
 
-    def backward(self, grad_output, target):
+    def backward2(self, grad_output, target):
         grad_output = np.clip(grad_output, .001, .999)
         tmp = - ( target/grad_output + (1-target) / (1-grad_output))
         return tmp
@@ -148,14 +150,14 @@ class MLP(object):
         xsum = sum(x_batch)/ float(batch_size)
         pipe = [p/float(batch_size) for p in pipe]
         siphon = []
-        siphon.append( self.layers[-1].backward( pipe[3], y) )
+        siphon.append( self.layers[-1].backward( pipe[-1], y) )
         #pdb.set_trace()
-        for lyr, p in zip( self.layers[::-1][1:], pipe[::-1][1:] ):
+        for lyr, p in zip( self.layers[::-1][2:], pipe[::-1][2:] ):
             siphon.append( lyr.backward(siphon[-1], p, lr, mtm, l2_p) )
         siphon.append( self.layers[0].backward( siphon[-1], xsum, lr, mtm, l2_p ) )
 
 
-        pdb.set_trace()
+        #pdb.set_trace()
 
         
         return  #loss, accuracy #RETURN ACCURACY AND LOSS FOR THIS SUBSET
@@ -186,19 +188,21 @@ class MLP(object):
 
 if __name__ == '__main__':
 
-    data = cPickle.load(open('cifar-2class-py2/cifar_2class_py2.p', 'rb'))
+    data = pickle.load(open('cifar-2class-py2/cifar_2class_py2.p3', 'rb'))
 
-    train_x = data['train_data']/127.5-1#normalized to [-1,1]; 
-    train_y = data['train_labels']
-    test_x = data['test_data']/127.5-1  #normalized to [-1,1]; 
-    test_y = data['test_labels']
+    #pdb.set_trace()
+
+    train_x = data[b'train_data']/127.5-1#normalized to [-1,1]; 
+    train_y = data[b'train_labels']
+    test_x = data[b'test_data']/127.5-1  #normalized to [-1,1]; 
+    test_y = data[b'test_labels']
     #PAD WITH BIAS DIM
     train_x = np.concatenate( ( train_x, np.ones((1, train_x.shape[0])).T ), axis=1)
     test_x = np.concatenate( ( test_x, np.ones((1, test_x.shape[0])).T ), axis=1)
 
     num_examples, input_dims = train_x.shape
      
-    hidden_units = input_dims * 2
+    hidden_units = 1000 #input_dims * 2
     num_epochs = 10
     num_batches = 100
     batch_size = float(len(train_x))/float(num_batches)
@@ -211,7 +215,7 @@ if __name__ == '__main__':
     mlp = MLP(input_dims, hidden_units)
 
     test_loss = test_accuracy = 0
-    for epoch in xrange(num_epochs):
+    for epoch in range(num_epochs):
 
         # INSERT YOUR CODE FOR EACH EPOCH HERE
         
@@ -221,7 +225,7 @@ if __name__ == '__main__':
         np.random.set_state(rng)
         np.random.shuffle(train_x)
 
-        for b in xrange(num_batches):
+        for b in range(num_batches):
             start = float(b) * batch_size
             end = start + batch_size
             cut = slice(int(start), int(end))
@@ -238,9 +242,8 @@ if __name__ == '__main__':
             #test_loss, test_accuracy = mlp.evaluate( test_x, test_y )
 
             total_loss += train_loss
-            print("Train loss is: ", train_loss)
 
-            print('\r[Epoch {}, mb {}]  Avg.Loss = {}, Accuracy={}'.format(
+            print('\r[Epoch {}, mb {}]  Avg.Loss = {}, Accuracy={}%'.format(
                     epoch + 1, b +  1, total_loss/(b+1), train_accuracy ), end='', )
 
             sys.stdout.flush()
