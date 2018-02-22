@@ -6,6 +6,7 @@ import sys
 import pdb
 import pickle
 import numpy as np
+from operator import add
 
 # This is a class for a LinearTransform layer which takes an input 
 # weight matrix W and computes W x as the forward step
@@ -29,8 +30,8 @@ class LinearTransform(object):
         delt = np.dot( np.matrix(zin).T , np.matrix(grad_output) )
         self.v = self.v*momentum +delt*learning_rate #learning_rate*grad_output
         self.W -= self.v
-        #print("Delta = ", self.v)
         self.bias -= grad_output*learning_rate
+        print(self.W)
         return delt#zin * grad_output
 
 
@@ -43,8 +44,8 @@ class ReLU(object):
 
     #on backward pass we go from 
     def backward( self, grad_output, zin,
-            learning_rate=0.0, momentum=0.0, l2_penalty=0.0 ):
-        return np.multiply( grad_output.T, zin* (zin > 0 ) ) #filter those < 0, map to 1
+            learning_rate=0.1, momentum=0.1, l2_penalty=0.1 ):
+        return np.multiply( grad_output.T, 1 * (zin > 0 ) ) #filter those < 0, map to 1
         
         #otherwise
         #for z in zin:
@@ -131,6 +132,7 @@ class MLP(object):
         lr=.5, mtm=.1, l2_p=.1 ):      #train on variable sizebatch
         loss = 0
 
+        pipeSum = [0]*4
         pipe = [0]*4 
         #pipe = out1, g(out1), out2, sig(out2), cEnt(sig(out2)
         batch_size = float(len(x_batch))
@@ -138,26 +140,30 @@ class MLP(object):
 
         for x,y in zip(x_batch, y_batch):
             #FORWARD AND STORE
-            pipe[0] += self.layers[0].forward(x)
+            pipe = []
+            pipe.append( self.layers[0].forward(x) )
             for i,lyr in enumerate(self.layers[1:-1]):
-                pipe[i+1] += lyr.forward(pipe[i]) 
+                pipe.append(lyr.forward(pipe[i]) )
             #pipe( self.layers[-1].forward(pipe[-1], y) )
 
+
+            pipeSum = map(add, pipeSum, pipe)
             xsum += x
 
         #BACKWARDS
 
         xsum = sum(x_batch)/ float(batch_size)
-        pipe = [p/float(batch_size) for p in pipe]
+        #pipe = [p/float(batch_size) for p in pipeSum]
+        pipe = [ p/batch_size for p in pipeSum]
         siphon = []
         siphon.append( self.layers[-1].backward( pipe[-1], y) )
-        #pdb.set_trace()
-        for lyr, p in zip( self.layers[::-1][2:], pipe[::-1][2:] ):
+        for lyr, p in zip( self.layers[::-1][1:], pipe[::-1][1:] ):
             siphon.append( lyr.backward(siphon[-1], p, lr, mtm, l2_p) )
         siphon.append( self.layers[0].backward( siphon[-1], xsum, lr, mtm, l2_p ) )
 
+        
 
-        #pdb.set_trace()
+        pdb.set_trace()
 
         
         return  #loss, accuracy #RETURN ACCURACY AND LOSS FOR THIS SUBSET
@@ -196,9 +202,6 @@ if __name__ == '__main__':
     train_y = data[b'train_labels']
     test_x = data[b'test_data']/127.5-1  #normalized to [-1,1]; 
     test_y = data[b'test_labels']
-    #PAD WITH BIAS DIM
-    train_x = np.concatenate( ( train_x, np.ones((1, train_x.shape[0])).T ), axis=1)
-    test_x = np.concatenate( ( test_x, np.ones((1, test_x.shape[0])).T ), axis=1)
 
     num_examples, input_dims = train_x.shape
      
@@ -208,7 +211,7 @@ if __name__ == '__main__':
     batch_size = float(len(train_x))/float(num_batches)
 
 
-    lr = .0001
+    lr = .1
     momentum = .1
     l2_penalty = .1
 
