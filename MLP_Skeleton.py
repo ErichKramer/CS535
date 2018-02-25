@@ -15,8 +15,6 @@ class LinearTransform(object):
 
     #take in W as dimensions needed
     def __init__(self, W):
-        print(W)
-        #W = (W[0]+1, W[1])
         self.W = np.random.randn( *W )*.1  #here the inputs are already scaled for x bias
         self.bias = np.ones(( 1, W[1]) )*.1
 
@@ -200,35 +198,17 @@ class MLP(object):
         # INSERT CODE for testing the network
 # ADD other operations and data entries in MLP if needed
 
-if __name__ == '__main__':
 
-    data = pickle.load(open('cifar-2class-py2/cifar_2class_py2.p3', 'rb'))
-
-
-    train_x = data[b'train_data'] 
-    train_y = data[b'train_labels']
-    test_x = data[b'test_data'] 
-    test_y = data[b'test_labels']
-
-    nm = skp.Normalizer()
-    train_x = nm.fit_transform(train_x)
-    test_x = nm.transform(test_x)
+def max_acc(train_x, train_y, test_x, test_y, hidden_units=1000, \
+        num_epochs=10, num_batches=100, \
+        lr=.001, momentum=.1, l2_penalty=.1, loud=False):
 
     num_examples, input_dims = train_x.shape
-     
-    hidden_units = 1000 #input_dims 
-    num_epochs = 10
-    num_batches = 100
     batch_size = float(len(train_x))/float(num_batches)
-
-
-    lr = .001
-    momentum = .1
-    l2_penalty = .1
-
     mlp = MLP(input_dims, hidden_units)
 
-    test_loss = test_accuracy = 0
+    max_train = max_test = 0
+
     for epoch in range(num_epochs):
 
         # INSERT YOUR CODE FOR EACH EPOCH HERE
@@ -244,36 +224,63 @@ if __name__ == '__main__':
             end = start + batch_size
             cut = slice(int(start), int(end))
 
-            print("\t", cut)
-
-
             #TRAIN
 
             mlp.train( train_x[cut], train_y[cut], lr, momentum, l2_penalty)
-
             train_loss, train_accuracy = mlp.evaluate( train_x[cut], train_y[cut] )
 
-
             total_loss += train_loss
-
+            #if loud:
             print('\r[Epoch {}, mb {}]  Avg.Loss = {:.3f}, Accuracy={:.3f}%'.format(
-                    epoch + 1, b +  1, float(total_loss/(b+1)), float(train_accuracy) ), end='', )
-
+                    epoch + 1, b +  1, float(total_loss/(b+1)), float(train_accuracy) ) )
             sys.stdout.flush()
-                # INSERT YOUR CODE AFTER ALL MINI_BATCHES HERE
-                # MAKE SURE TO COMPUTE train_loss, train_accuracy, test_loss, test_accuracy
-    
 
         train_loss, train_accuracy = mlp.evaluate( train_x, train_y)
-        print('\n    Train Loss: {:.3f}    Train Acc.: {:.3f}%'.format(
-            float(train_loss), float(train_accuracy) ) )
-
         test_loss, test_accuracy = mlp.evaluate( test_x, test_y )
         
-        print('    Test Loss:  {:.3f}    Test Acc.:  {:.3f}%'.format(
-            float(test_loss) ,  float(test_accuracy) ) ) 
+        max_train = max(max_train, train_accuracy)
+        max_test = max(max_test, test_accuracy)
+
+        if loud:
+            print('\n    Train Loss: {:.3f}    Train Acc.: {:.3f}%'.format( 
+                float(train_loss), float(train_accuracy) ) )
+            print('    Test Loss:  {:.3f}    Test Acc.:  {:.3f}%'.format(  
+                float(test_loss) ,  float(test_accuracy) ) ) 
+    return max_train, max_test
+
+if __name__ == '__main__':
+
+    data = pickle.load(open('cifar-2class-py2/cifar_2class_py2.p3', 'rb'))
 
 
+    train_x = data[b'train_data']   #10,000 elements x 3072 size
+    train_y = data[b'train_labels']
+    test_x = data[b'test_data'] 
+    test_y = data[b'test_labels']
+
+    nm = skp.Normalizer()
+    train_x = nm.fit_transform(train_x)
+    test_x = nm.transform(test_x)
+
+
+    ep=1
+    num_b=[  100, 1000, 10000 ]
+    
+    maxes = []
+    for n in num_b:
+        print("Batch size: ", n)
+        maxes.append( max_acc(train_x, train_y, test_x, test_y, num_epochs=ep, \
+                num_batches=n, loud=True) )
+
+    pdb.set_trace()
+
+
+#def max_acc(train_x, train_y, test_x, test_y, hidden_units=1000, \
+#        num_epochs=10, num_batches=100, \
+#        lr=.001, momentum=.1, l2_penalty=.1, loud=False):
+
+    #num_examples, input_dims = train_x.shape
+ 
 
 
 
