@@ -6,6 +6,7 @@ import sys
 import pdb
 import pickle
 import numpy as np
+import sklearn.preprocessing as skp
 from operator import add
 
 # This is a class for a LinearTransform layer which takes an input 
@@ -16,30 +17,30 @@ class LinearTransform(object):
     def __init__(self, W):
         print(W)
         #W = (W[0]+1, W[1])
-        self.W = np.random.rand( *W )*.2 -.1 #here the inputs are already scaled for x bias
+        self.W = np.random.randn( *W )*.1  #here the inputs are already scaled for x bias
         self.bias = np.ones(( 1, W[1]) )*.1
 
         self.v = 0
         
 
     def forward(self, x):
-        return np.dot( x , self.W) + self.bias   #W is fromXto, x is input 1Xfrom
+        return x.dot(self.W) + self.bias
+        #W is fromXto, x is input 1Xfrom
 
     def backward( self, grad_output, zin,
             learning_rate=  0.1, momentum=0.1, l2_penalty=0.0 ):
-        delt = np.dot( np.matrix(zin).T , np.matrix(grad_output) )
+        delt = np.dot( zin.T , grad_output )
         self.v = self.v*momentum +delt*learning_rate #learning_rate*grad_output
-        self.W -= self.v
-        self.bias -= grad_output*learning_rate
-        print(self.W)
-        return delt#zin * grad_output
+        self.W = (1-l2_penalty*learning_rate)*self.W - self.v
+        #sels.bias -= grad_output*learning_rate
+        return np.dot( self.W , grad_output.T) #zin * grad_output
 
 
 # This is a class for a ReLU layer max(x,0)
 class ReLU(object):
 
     def forward(self, x):
-        return x * ( x > 0 )  #equivalent to x if x >0 ; else 0
+        return np.maximum(0, x)
         # DEFINE forward function
 
     #on backward pass we go from 
@@ -75,17 +76,17 @@ class Sigmoid(object):
 
 
         #predict class 0 or 1 based on sigmoid mapping from assignment desc.
-        def predict( self, x):
-            #x = np.clip(x, -10, 10)
-            if x > .5:#(1/(1+np.exp(-x) )) > .5:
-                return 1
-            else:
-                return 0
+        #def predict( self, x):
+        #    #x = np.clip(x, -10, 10)
+        #    if x > .5:#(1/(1+np.exp(-x) )) > .5:
+        #        return 1
+        #    else:
+        #        return 0
             
 class CrossEntropy(object):
     def forward(self, x, target):
-        x = np.clip(x, .001, .999)
-        return -( target*np.log(x) + (1.0-target)*np.log(1.0-x))
+        x = np.clip(x, .001, None)
+        return -( target*np.log(x) + (1.0-target)*np.log(1.0-x))/(x.shape[0])
     
 
     def forward2(self, x, target):
@@ -130,14 +131,29 @@ class MLP(object):
 
     def train( self, x_batch, y_batch, 
         lr=.5, mtm=.1, l2_p=.1 ):      #train on variable sizebatch
-        loss = 0
 
-        pipeSum = [0]*4
-        pipe = [0]*4 
         #pipe = out1, g(out1), out2, sig(out2), cEnt(sig(out2)
-        batch_size = float(len(x_batch))
-        xsum = np.zeros(x_batch[0].shape)
+    
 
+        pipe = [x_batch]
+        pipe.append( self.layers[0].forward( pipe[-1] ) )
+        pipe.append( self.layers[1].forward( pipe[-1] ) )
+        pipe.append( self.layers[2].forward( pipe[-1] ) )
+        pipe.append( self.layers[3].forward( pipe[-1] ) )
+
+
+        siphon = []
+        siphon.append( self.layers[-1].backward( pipe[-1], y_batch ) )
+        for i in range(3,6):
+            siphon.append( self.layers[-i].backward( siphon[-1], \
+                    pipe[-i], lr, mtm, l2_p) ) 
+
+        #maybe do 1-2-1 structure instead of 1-3 if does not work
+
+        #pdb.set_trace()
+
+        
+        '''
         for x,y in zip(x_batch, y_batch):
             #FORWARD AND STORE
             pipe = []
@@ -148,45 +164,37 @@ class MLP(object):
 
 
             pipeSum = map(add, pipeSum, pipe)
-            xsum += x
+            #xsum += x
 
         #BACKWARDS
-
-        xsum = sum(x_batch)/ float(batch_size)
+        xsum = sum(x_batch)
         #pipe = [p/float(batch_size) for p in pipeSum]
-        pipe = [ p/batch_size for p in pipeSum]
+        pipe = list(pipeSum) 
         siphon = []
         siphon.append( self.layers[-1].backward( pipe[-1], y) )
-        for lyr, p in zip( self.layers[::-1][1:], pipe[::-1][1:] ):
+        for lyr, p in zip( self.layers[::-1][2:], pipe[::-1][2:] ):
             siphon.append( lyr.backward(siphon[-1], p, lr, mtm, l2_p) )
         siphon.append( self.layers[0].backward( siphon[-1], xsum, lr, mtm, l2_p ) )
+        '''
 
-        
-
-        pdb.set_trace()
-
-        
         return  #loss, accuracy #RETURN ACCURACY AND LOSS FOR THIS SUBSET
 
 
 
     def evaluate(self, x_batch, y_batch):
 
-        loss = correct = total = 0
+        pipe = [x_batch]
+        pipe.append( self.layers[0].forward( pipe[-1] ) )
+        pipe.append( self.layers[1].forward( pipe[-1] ) )
+        pipe.append( self.layers[2].forward( pipe[-1] ) )
+        pipe.append( self.layers[3].forward( pipe[-1] ) )
+    
+        loss = sum( self.layers[4].forward( pipe[-1], y_batch) )
 
-        for x,y in zip(x_batch, y_batch):
-            pipe = []
-            pipe.append(self.layers[0].forward(x) )
-            for lyr in self.layers[1:-1]:
-                pipe.append(lyr.forward( pipe[-1] ) )
-            pred = self.layers[-2].predict( pipe[-1] )
 
-            if pred == y:
-                correct +=1
-            total +=1
-            loss += self.layers[-1].forward(pipe[-1], y )
-
-        accuracy = int(correct/total * 100)
+        predictions = [ 1 if x > .5 else 0 for x in pipe[-1] ]
+        accuracy = sum( [1 if x == y else 0 for x,y in zip(predictions, y_batch) ] \
+                )/x_batch.shape[0] * 100
 
         return  loss, accuracy
         # INSERT CODE for testing the network
@@ -196,22 +204,25 @@ if __name__ == '__main__':
 
     data = pickle.load(open('cifar-2class-py2/cifar_2class_py2.p3', 'rb'))
 
-    #pdb.set_trace()
 
-    train_x = data[b'train_data']/127.5-1#normalized to [-1,1]; 
+    train_x = data[b'train_data'] 
     train_y = data[b'train_labels']
-    test_x = data[b'test_data']/127.5-1  #normalized to [-1,1]; 
+    test_x = data[b'test_data'] 
     test_y = data[b'test_labels']
+
+    nm = skp.Normalizer()
+    train_x = nm.fit_transform(train_x)
+    test_x = nm.transform(test_x)
 
     num_examples, input_dims = train_x.shape
      
-    hidden_units = 1000 #input_dims * 2
+    hidden_units = 1000 #input_dims 
     num_epochs = 10
     num_batches = 100
     batch_size = float(len(train_x))/float(num_batches)
 
 
-    lr = .1
+    lr = .001
     momentum = .1
     l2_penalty = .1
 
@@ -237,17 +248,16 @@ if __name__ == '__main__':
 
 
             #TRAIN
+
             mlp.train( train_x[cut], train_y[cut], lr, momentum, l2_penalty)
-            
+
             train_loss, train_accuracy = mlp.evaluate( train_x[cut], train_y[cut] )
 
-            #REFRESH TEST RESULTS, 
-            #test_loss, test_accuracy = mlp.evaluate( test_x, test_y )
 
             total_loss += train_loss
 
-            print('\r[Epoch {}, mb {}]  Avg.Loss = {}, Accuracy={}%'.format(
-                    epoch + 1, b +  1, total_loss/(b+1), train_accuracy ), end='', )
+            print('\r[Epoch {}, mb {}]  Avg.Loss = {:.3f}, Accuracy={:.3f}%'.format(
+                    epoch + 1, b +  1, float(total_loss/(b+1)), float(train_accuracy) ), end='', )
 
             sys.stdout.flush()
                 # INSERT YOUR CODE AFTER ALL MINI_BATCHES HERE
@@ -255,13 +265,13 @@ if __name__ == '__main__':
     
 
         train_loss, train_accuracy = mlp.evaluate( train_x, train_y)
-        print('\n    Train Loss: {}    Train Acc.: {}%'.format(
-            train_loss, train_accuracy) )
+        print('\n    Train Loss: {:.3f}    Train Acc.: {:.3f}%'.format(
+            float(train_loss), float(train_accuracy) ) )
 
         test_loss, test_accuracy = mlp.evaluate( test_x, test_y )
         
-        print('    Test Loss:  {}    Test Acc.:  {}%'.format(
-            test_loss,  test_accuracy ) ) 
+        print('    Test Loss:  {:.3f}    Test Acc.:  {:.3f}%'.format(
+            float(test_loss) ,  float(test_accuracy) ) ) 
 
 
 
