@@ -6,6 +6,7 @@ import sys
 import pdb
 import pickle
 import numpy as np
+import matplotlib.pyplot as plt
 import sklearn.preprocessing as skp
 from operator import add
 
@@ -200,7 +201,7 @@ class MLP(object):
 
 
 def max_acc(train_x, train_y, test_x, test_y, hidden_units=1000, \
-        num_epochs=10, num_batches=100, \
+        num_epochs=5, num_batches=100, \
         lr=.001, momentum=.1, l2_penalty=.1, loud=False):
 
     num_examples, input_dims = train_x.shape
@@ -230,9 +231,9 @@ def max_acc(train_x, train_y, test_x, test_y, hidden_units=1000, \
             train_loss, train_accuracy = mlp.evaluate( train_x[cut], train_y[cut] )
 
             total_loss += train_loss
-            #if loud:
-            print('\r[Epoch {}, mb {}]  Avg.Loss = {:.3f}, Accuracy={:.3f}%'.format(
-                    epoch + 1, b +  1, float(total_loss/(b+1)), float(train_accuracy) ) )
+            if loud:
+                print('\r[Epoch {}, mb {}]  Avg.Loss = {:.3f}, Accuracy={:.3f}%'.format(
+                        epoch + 1, b +  1, float(total_loss/(b+1)), float(train_accuracy) ) )
             sys.stdout.flush()
 
         train_loss, train_accuracy = mlp.evaluate( train_x, train_y)
@@ -264,13 +265,28 @@ if __name__ == '__main__':
 
 
     ep=1
-    num_b=[  100, 1000, 10000 ]
+    num_b=[ 1,  100, 1000, 10000 ]
     
     maxes = []
     for n in num_b:
-        print("Batch size: ", n)
+        print("Number of Batches: ", n)
         maxes.append( max_acc(train_x, train_y, test_x, test_y, num_epochs=ep, \
                 num_batches=n, loud=True) )
+
+
+    pdb.set_trace()
+    trainMax = [ x[0] for x in maxes ]
+    testMax  = [ x[1] for x in maxes ]
+
+    print(maxes, num_b)
+    plt.figure(figsize=(12,6))
+    b, = plt.plot(num_b, trainMax, '--rs', label = "Train Acc Max")
+    c, = plt.plot(num_b, testMax, '--bs', label="Test Acc Max")
+    plt.legend(handles=[b,c])
+    plt.ylabel("Accuracy")
+    plt.xlabel("Batch Size")
+    plt.savefig("Accuracy_vs_batch_size.png")
+    plt.show()
 
     pdb.set_trace()
 
